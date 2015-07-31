@@ -82,7 +82,8 @@ CSP_DEFINE_TASK(csp_zmqhub_task) {
 		}
 
 		/* Create new csp packet */
-		csp_packet_t * packet = csp_buffer_get(256);
+		uint16_t payload_size = datalen - sizeof(((csp_packet_t*)0)->id) - sizeof(char);
+		csp_packet_t * packet = csp_buffer_get(payload_size);
 		if (packet == NULL) {
 			zmq_msg_close(&msg);
 			continue;
@@ -91,7 +92,7 @@ CSP_DEFINE_TASK(csp_zmqhub_task) {
 		/* Copy the data from zmq to csp */
 		char * satidptr = ((char *) &packet->id) - 1;
 		memcpy(satidptr, zmq_msg_data(&msg), datalen);
-		packet->length = datalen - 4 - 1;
+		packet->length = payload_size;
 
 		/* Queue up packet to router */
 		csp_qfifo_write(packet, &csp_if_zmqhub, NULL);
