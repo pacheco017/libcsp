@@ -56,48 +56,86 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include <libsocketcan.h>
 #endif
 
-static int can_socket; /** SocketCAN socket handle */
+#define MAX_SUPPORTED_CAN_INSTANCES 3
+
+typedef struct csp_can_socket_t {
+	int can_socket;         /** SocketCAN socket handle */
+	csp_iface_t *csp_if_can;
+} csp_can_instance_t;
+
+static csp_can_instance_t can_instances[MAX_SUPPORTED_CAN_INSTANCES]; /** SocketCAN socket handles */
+static size_t total_interfaces = 0;
+
+static csp_can_instance_t * get_available_can_instance(void)
+{
+	csp_can_instance_t *iface_instance = NULL;
+	if(total_interfaces < MAX_SUPPORTED_CAN_INSTANCES) {
+		iface_instance = &can_instances[total_interfaces];
+		total_interfaces++;
+	}
+	return iface_instance;
+}
+
+static int get_interface_socket(const csp_iface_t * iface)
+{
+	for (size_t i=0; i<total_interfaces; ++i) {
+		if (can_instances[i].csp_if_can == iface) {
+			return can_instances[i].can_socket;
+		}
+	}
+	return -1;
+}
 
 static void * socketcan_rx_thread(void * parameters)
 {
-	struct can_frame frame;
+	csp_can_frame_t csp_can_frame;
+	struct can_frame *frame;
 	int nbytes;
+
+	csp_can_instance_t *can_instance = (csp_can_instance_t *) parameters;
+	csp_can_frame.interface = can_instance->csp_if_can;
+	frame = (struct can_frame*) &csp_can_frame;
 
 	while (1) {
 		/* Read CAN frame */
-		nbytes = read(can_socket, &frame, sizeof(frame));
+		nbytes = read(can_instance->can_socket, frame, sizeof(*frame));
 		if (nbytes < 0) {
 			csp_log_error("read: %s", strerror(errno));
 			continue;
 		}
 
-		if (nbytes != sizeof(frame)) {
+		if (nbytes != sizeof(*frame)) {
 			csp_log_warn("Read incomplete CAN frame");
 			continue;
 		}
 
 		/* Frame type */
-		if (frame.can_id & (CAN_ERR_FLAG | CAN_RTR_FLAG) || !(frame.can_id & CAN_EFF_FLAG)) {
+		if (frame->can_id & (CAN_ERR_FLAG | CAN_RTR_FLAG) || !(frame->can_id & CAN_EFF_FLAG)) {
 			/* Drop error and remote frames */
 			csp_log_warn("Discarding ERR/RTR/SFF frame");
 			continue;
 		}
 
 		/* Strip flags */
-		frame.can_id &= CAN_EFF_MASK;
+		frame->can_id &= CAN_EFF_MASK;
 
 		/* Call RX callback */
-		csp_can_rx_frame((can_frame_t *)&frame, NULL);
+		csp_can_rx_frame(&csp_can_frame, NULL);
 	}
 
 	/* We should never reach this point */
 	pthread_exit(NULL);
 }
 
-int can_send(can_id_t id, uint8_t data[], uint8_t dlc)
+int can_send(csp_iface_t *csp_if_can, can_id_t id, uint8_t data[], uint8_t dlc)
 {
 	struct can_frame frame;
 	int i, tries = 0;
+	int can_socket;
+
+	can_socket = get_interface_socket(csp_if_can);
+	if (can_socket < 0)
+		return -1;
 
 	if (dlc > 8)
 		return -1;
@@ -126,11 +164,23 @@ int can_send(can_id_t id, uint8_t data[], uint8_t dlc)
 	return 0;
 }
 
-int can_init(uint32_t id, uint32_t mask, struct csp_can_config *conf)
+int can_init(csp_iface_t *csp_if_can, uint32_t id, uint32_t mask, struct csp_can_config *conf)
 {
 	struct ifreq ifr;
 	struct sockaddr_can addr;
 	pthread_t rx_thread;
+	int *can_socket;
+	csp_can_instance_t *iface_instance;
+
+	iface_instance = get_available_can_instance();
+	if (iface_instance == NULL) {
+		return -1;
+	}
+
+	csp_if_can->driver = (void *)iface_instance;
+	iface_instance->csp_if_can = csp_if_can;
+	can_socket = &iface_instance->can_socket;
+
 
 	csp_assert(conf && conf->ifc);
 
@@ -144,14 +194,14 @@ int can_init(uint32_t id, uint32_t mask, struct csp_can_config *conf)
 #endif
 
 	/* Create socket */
-	if ((can_socket = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
+	if ((*can_socket = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
 		csp_log_error("socket: %s", strerror(errno));
 		return -1;
 	}
 
 	/* Locate interface */
 	strncpy(ifr.ifr_name, conf->ifc, IFNAMSIZ - 1);
-	if (ioctl(can_socket, SIOCGIFINDEX, &ifr) < 0) {
+	if (ioctl(*can_socket, SIOCGIFINDEX, &ifr) < 0) {
 		csp_log_error("ioctl: %s", strerror(errno));
 		return -1;
 	}
@@ -159,7 +209,7 @@ int can_init(uint32_t id, uint32_t mask, struct csp_can_config *conf)
 	/* Bind the socket to CAN interface */
 	addr.can_family = AF_CAN;
 	addr.can_ifindex = ifr.ifr_ifindex;
-	if (bind(can_socket, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+	if (bind(*can_socket, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		csp_log_error("bind: %s", strerror(errno));
 		return -1;
 	}
@@ -169,7 +219,7 @@ int can_init(uint32_t id, uint32_t mask, struct csp_can_config *conf)
 		struct can_filter filter;
 		filter.can_id   = id;
 		filter.can_mask = mask;
-		if (setsockopt(can_socket, SOL_CAN_RAW, CAN_RAW_FILTER, &filter, sizeof(filter)) < 0) {
+		if (setsockopt(*can_socket, SOL_CAN_RAW, CAN_RAW_FILTER, &filter, sizeof(filter)) < 0) {
 			csp_log_error("setsockopt: %s", strerror(errno));
 			return -1;
 		}

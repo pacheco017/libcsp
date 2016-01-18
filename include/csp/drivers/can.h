@@ -49,17 +49,19 @@ typedef struct {
 		uint16_t data16[4];
 		uint32_t data32[2];
 	};
-} can_frame_t;
+	/** Interface handling this frame. */
+	csp_iface_t *interface;
+} csp_can_frame_t;
 
 typedef enum {
 	CAN_ERROR = 0,
 	CAN_NO_ERROR = 1,
 } can_error_t;
 
-int can_init(uint32_t id, uint32_t mask, struct csp_can_config *conf);
-int can_send(can_id_t id, uint8_t * data, uint8_t dlc);
+int can_init(csp_iface_t *csp_if_can, uint32_t id, uint32_t mask, struct csp_can_config *conf);
+int can_send(csp_iface_t *csp_if_can, can_id_t id, uint8_t * data, uint8_t dlc);
 
-int csp_can_rx_frame(can_frame_t *frame, CSP_BASE_TYPE *task_woken);
+int csp_can_rx_frame(csp_can_frame_t *frame, CSP_BASE_TYPE *task_woken);
 
 #ifdef __cplusplus
 } /* extern "C" */
