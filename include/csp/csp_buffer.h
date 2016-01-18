@@ -53,7 +53,7 @@ void * csp_buffer_get(size_t size);
  * @param buf_size Specify what data-size you will put in the buffer
  * @return pointer to a free csp_packet_t or NULL if out of memory
  */
-void * csp_buffer_get_isr(size_t buf_size);
+void *csp_buffer_get_isr(size_t buf_size, CSP_BASE_TYPE *task_woken);
 
 /**
  * Free a buffer after use.
@@ -65,7 +65,7 @@ void csp_buffer_free(void *packet);
  * Free a buffer after use in ISR context.
  * @param packet pointer to memory area, must be acquired by csp_buffer_get().
  */
-void csp_buffer_free_isr(void *packet);
+void csp_buffer_free_isr(void *packet, CSP_BASE_TYPE *task_woken);
 
 /**
  * Clone an existing packet and increase/decrease cloned packet size.

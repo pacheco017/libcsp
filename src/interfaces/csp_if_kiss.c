@@ -124,7 +124,7 @@ void csp_kiss_rx(csp_iface_t * interface, uint8_t * buf, int len, void * pxTaskW
 				if (pxTaskWoken == NULL) {
 					driver->rx_packet = csp_buffer_get(interface->mtu);
 				} else {
-					driver->rx_packet = csp_buffer_get_isr(interface->mtu);
+					driver->rx_packet = csp_buffer_get_isr(interface->mtu, pxTaskWoken);
 				}
 			}
 

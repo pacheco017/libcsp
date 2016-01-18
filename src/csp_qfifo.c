@@ -93,7 +93,7 @@ void csp_qfifo_write(csp_packet_t * packet, csp_iface_t * interface, CSP_BASE_TY
 		if (pxTaskWoken == NULL)
 			csp_buffer_free(packet);
 		else
-			csp_buffer_free_isr(packet);
+			csp_buffer_free_isr(packet, pxTaskWoken);
 		return;
 	}
 
@@ -129,7 +129,7 @@ void csp_qfifo_write(csp_packet_t * packet, csp_iface_t * interface, CSP_BASE_TY
 		if (pxTaskWoken == NULL)
 			csp_buffer_free(packet);
 		else
-			csp_buffer_free_isr(packet);
+			csp_buffer_free_isr(packet, pxTaskWoken);
 	} else {
 		interface->rx++;
 		interface->rxbytes += packet->length;

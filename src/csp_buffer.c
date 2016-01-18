@@ -95,15 +95,14 @@ fail_malloc:
 
 }
 
-void *csp_buffer_get_isr(size_t buf_size) {
+void *csp_buffer_get_isr(size_t buf_size, CSP_BASE_TYPE *task_woken) {
 
 	csp_skbf_t * buffer = NULL;
-	CSP_BASE_TYPE task_woken = 0;
 
 	if (buf_size + CSP_BUFFER_PACKET_OVERHEAD > size)
 		return NULL;
 
-	csp_queue_dequeue_isr(csp_buffers, &buffer, &task_woken);
+	csp_queue_dequeue_isr(csp_buffers, &buffer, task_woken);
 	if (buffer == NULL)
 		return NULL;
 
@@ -141,8 +140,7 @@ void *csp_buffer_get(size_t buf_size) {
 	return buffer->skbf_data;
 }
 
-void csp_buffer_free_isr(void *packet) {
-	CSP_BASE_TYPE task_woken = 0;
+void csp_buffer_free_isr(void *packet, CSP_BASE_TYPE *task_woken) {
 	if (!packet)
 		return;
 
@@ -161,7 +159,7 @@ void csp_buffer_free_isr(void *packet) {
 		return;
 	} else {
 		buf->refcount = 0;
-		csp_queue_enqueue_isr(csp_buffers, &buf, &task_woken);
+		csp_queue_enqueue_isr(csp_buffers, &buf, task_woken);
 	}
 
 }
