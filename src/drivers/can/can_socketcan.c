@@ -226,7 +226,7 @@ int can_init(csp_iface_t *csp_if_can, uint32_t id, uint32_t mask, struct csp_can
 	}
 
 	/* Create receive thread */
-	if (pthread_create(&rx_thread, NULL, socketcan_rx_thread, NULL) != 0) {
+	if (pthread_create(&rx_thread, NULL, socketcan_rx_thread, iface_instance) != 0) {
 		csp_log_error("pthread_create: %s", strerror(errno));
 		return -1;
 	}
